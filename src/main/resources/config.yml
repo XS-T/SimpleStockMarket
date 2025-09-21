@@ -1,0 +1,99 @@
+# StockMarket Plugin Configuration
+
+# Database settings
+database:
+  type: sqlite  # sqlite, mysql, postgresql
+  host: localhost
+  port: 3306
+  name: stockmarket
+  username: root
+  password: password
+
+# Economy settings
+economy:
+  starting-balance: 10000.0
+
+# Currency display
+currency:
+  symbol: "$"
+
+# Trading settings
+trading:
+  fee-percent: 0.1  # 0.1% trading fee
+  minimum-fee: 1.0
+
+# Market settings
+market:
+  update-interval: 1200  # Ticks (60 seconds at 20 TPS)
+  fluctuation-interval: 5  # Update every 5 ticks
+  event-chance: 0.02  # 2% chance for market events
+  open-time: "09:00"
+  close-time: "17:00"
+  broadcast-news: true
+
+# Default stocks configuration
+default-stocks:
+  enabled: true
+  stocks:
+    TECH:
+      name: "TechCorp Industries"
+      category: TECHNOLOGY
+      initial-price: 150.00
+      volatility: 0.08
+    BANK:
+      name: "National Bank"
+      category: FINANCE
+      initial-price: 85.50
+      volatility: 0.05
+    HEAL:
+      name: "HealthCare Plus"
+      category: HEALTHCARE
+      initial-price: 220.00
+      volatility: 0.06
+    ENRG:
+      name: "Energy Solutions"
+      category: ENERGY
+      initial-price: 95.00
+      volatility: 0.12
+    SHOP:
+      name: "Consumer Goods Co"
+      category: CONSUMER
+      initial-price: 45.00
+      volatility: 0.07
+    MINE:
+      name: "Mining Corp"
+      category: MATERIALS
+      initial-price: 75.00
+      volatility: 0.10
+    UTIL:
+      name: "Utilities United"
+      category: UTILITIES
+      initial-price: 65.00
+      volatility: 0.04
+    PROP:
+      name: "Real Estate Group"
+      category: REAL_ESTATE
+      initial-price: 125.00
+      volatility: 0.06
+
+# API settings
+api:
+  enabled: true
+  business-integration: true
+  auto-create-business-stocks: true
+  default-business-volatility: 0.03
+
+# Messages
+messages:
+  market-closed: "§cThe market is currently closed!"
+  insufficient-funds: "§cInsufficient funds!"
+  insufficient-stocks: "§cYou don't own enough stocks!"
+  invalid-quantity: "§cInvalid quantity!"
+  stock-not-found: "§cStock not found!"
+  transaction-success: "§aTransaction completed successfully!"
+
+# Performance settings
+performance:
+  cache-size: 1000
+  cleanup-interval: 3600  # seconds
+  history-retention-days: 90

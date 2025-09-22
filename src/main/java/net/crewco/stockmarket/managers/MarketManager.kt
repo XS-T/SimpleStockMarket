@@ -5,6 +5,8 @@ import net.crewco.stockmarket.StockMarketPlugin
 import net.crewco.stockmarket.StockMarketPlugin.Companion.databaseManager
 import net.crewco.stockmarket.StockMarketPlugin.Companion.portfolioManager
 import net.crewco.stockmarket.StockMarketPlugin.Companion.stockManager
+import net.crewco.stockmarket.StockMarketPlugin.Companion.bankingAPI
+
 import net.crewco.stockmarket.data.Stock
 import net.crewco.stockmarket.data.StockTransaction
 import net.crewco.stockmarket.data.TransactionType
@@ -20,16 +22,17 @@ import java.time.LocalTime
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
-class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
+class MarketManager@Inject constructor(private val plugin: StockMarketPlugin) {
 
 	private var marketOpen = true
 	private val businessMetrics = ConcurrentHashMap<String, BusinessMetrics>()
 	private val priceChangeCallbacks = mutableListOf<(StockPriceChangeEvent) -> Unit>()
 	private val transactionCallbacks = mutableListOf<(StockTransactionEvent) -> Unit>()
+	private val config = plugin.config
 
 	// Trading fees configuration
-	private val tradingFeePercent = plugin.config.getDouble("trading.fee-percent", 0.1)
-	private val minimumFee = BigDecimal.valueOf(plugin.config.getDouble("trading.minimum-fee", 1.0))
+	private val tradingFeePercent = config.getDouble("trading.fee-percent", 0.1)
+	private val minimumFee = BigDecimal.valueOf(config.getDouble("trading.minimum-fee", 1.0))
 
 	init {
 		// Set market hours from config
@@ -42,22 +45,24 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 	fun buyStock(playerId: UUID, symbol: String, quantity: Int): StockTransaction? {
 		if (!marketOpen) return null
 		if (quantity <= 0) return null
+
 		val stock = stockManager.getStock(symbol) ?: return null
-		val portfolio = portfolioManager.getPortfolio(playerId) ?: return null
+		val bankingAPI = bankingAPI ?: return null
 
 		val totalCost = stock.currentPrice * BigDecimal.valueOf(quantity.toLong())
 		val fees = calculateTradingFees(totalCost)
 		val totalWithFees = totalCost + fees
 
-		// Check if player has enough balance
-		if (portfolio.balance < totalWithFees) {
+		// Check if player has enough balance through Banking API
+		val player = Bukkit.getOfflinePlayer(playerId)
+		if (!bankingAPI.hasBalance(player, totalWithFees)) {
 			return null
 		}
 
-		// Execute transaction
-		if (portfolioManager.removeBalance(playerId, totalWithFees) &&
-			portfolioManager.addHoldings(playerId, symbol, quantity)) {
+		// Execute transaction through Banking API
+		val withdrawSuccess = bankingAPI.withdraw(player, totalWithFees, "Stock Purchase: $symbol x$quantity")
 
+		if (withdrawSuccess && portfolioManager.addHoldings(playerId, symbol, quantity)) {
 			val transaction = StockTransaction(
 				playerId = playerId,
 				symbol = symbol,
@@ -80,6 +85,11 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 			transactionCallbacks.forEach { it(event) }
 
 			return transaction
+		} else {
+			// Refund if portfolio update failed
+			if (withdrawSuccess) {
+				bankingAPI.deposit(player, totalWithFees, "Stock Purchase Refund")
+			}
 		}
 
 		return null
@@ -93,6 +103,7 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 		if (quantity <= 0) return null
 
 		val stock = stockManager.getStock(symbol) ?: return null
+		val bankingAPI = bankingAPI ?: return null
 		val holdings = portfolioManager.getHoldings(playerId, symbol)
 
 		// Check if player has enough stocks
@@ -105,31 +116,37 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 		val netRevenue = totalRevenue - fees
 
 		// Execute transaction
-		if (portfolioManager.removeHoldings(playerId, symbol, quantity) &&
-			portfolioManager.addBalance(playerId, netRevenue)) {
+		if (portfolioManager.removeHoldings(playerId, symbol, quantity)) {
+			val player = Bukkit.getOfflinePlayer(playerId)
+			val depositSuccess = bankingAPI.deposit(player, netRevenue, "Stock Sale: $symbol x$quantity")
 
-			val transaction = StockTransaction(
-				playerId = playerId,
-				symbol = symbol,
-				type = TransactionType.SELL,
-				quantity = quantity,
-				pricePerShare = stock.currentPrice,
-				totalAmount = totalRevenue,
-				fees = fees
-			)
+			if (depositSuccess) {
+				val transaction = StockTransaction(
+					playerId = playerId,
+					symbol = symbol,
+					type = TransactionType.SELL,
+					quantity = quantity,
+					pricePerShare = stock.currentPrice,
+					totalAmount = totalRevenue,
+					fees = fees
+				)
 
-			// Save transaction
-			databaseManager.saveTransaction(transaction)
+				// Save transaction
+				databaseManager.saveTransaction(transaction)
 
-			// Update stock volume
-			updateStockVolume(symbol, quantity.toLong())
+				// Update stock volume
+				updateStockVolume(symbol, quantity.toLong())
 
-			// Fire event
-			val event = StockTransactionEvent(transaction, stock)
-			Bukkit.getPluginManager().callEvent(event)
-			transactionCallbacks.forEach { it(event) }
+				// Fire event
+				val event = StockTransactionEvent(transaction, stock)
+				Bukkit.getPluginManager().callEvent(event)
+				transactionCallbacks.forEach { it(event) }
 
-			return transaction
+				return transaction
+			} else {
+				// Restore holdings if deposit failed
+				portfolioManager.addHoldings(playerId, symbol, quantity)
+			}
 		}
 
 		return null
@@ -189,8 +206,8 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 	 */
 	private fun updateMarketStatus() {
 		val now = LocalTime.now()
-		val openTime = LocalTime.parse(plugin.config.getString("market.open-time", "09:00"))
-		val closeTime = LocalTime.parse(plugin.config.getString("market.close-time", "17:00"))
+		val openTime = LocalTime.parse(config.getString("market.open-time", "09:00"))
+		val closeTime = LocalTime.parse(config.getString("market.close-time", "17:00"))
 
 		marketOpen = now.isAfter(openTime) && now.isBefore(closeTime)
 	}
@@ -247,25 +264,29 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 	 */
 	fun payDividends(symbol: String, dividendPerShare: BigDecimal): Boolean {
 		val stock = stockManager.getStock(symbol) ?: return false
+		val bankingAPI = bankingAPI ?: return false
 		val shareholders = portfolioManager.getShareholders(symbol)
 
 		shareholders.forEach { (playerId, shares) ->
 			val dividendAmount = dividendPerShare * BigDecimal.valueOf(shares.toLong())
+			val player = Bukkit.getOfflinePlayer(playerId)
 
-			// Add dividend to player balance
-			portfolioManager.addBalance(playerId, dividendAmount)
+			// Pay dividend through Banking API
+			val success = bankingAPI.deposit(player, dividendAmount, "Dividend: $symbol")
 
-			// Record dividend transaction
-			val transaction = StockTransaction(
-				playerId = playerId,
-				symbol = symbol,
-				type = TransactionType.DIVIDEND,
-				quantity = shares,
-				pricePerShare = dividendPerShare,
-				totalAmount = dividendAmount
-			)
+			if (success) {
+				// Record dividend transaction
+				val transaction = StockTransaction(
+					playerId = playerId,
+					symbol = symbol,
+					type = TransactionType.DIVIDEND,
+					quantity = shares,
+					pricePerShare = dividendPerShare,
+					totalAmount = dividendAmount
+				)
 
-			databaseManager.saveTransaction(transaction)
+				databaseManager.saveTransaction(transaction)
+			}
 		}
 
 		plugin.logger.info("Paid dividends for $symbol: ${formatCurrency(dividendPerShare)} per share")
@@ -290,7 +311,7 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 	 * Format currency for display
 	 */
 	fun formatCurrency(amount: BigDecimal): String {
-		val symbol = plugin.config.getString("currency.symbol", "$")
+		val symbol = config.getString("currency.symbol", "$")
 		return "$symbol${String.format("%,.2f", amount.toDouble())}"
 	}
 
@@ -313,23 +334,23 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 	/**
 	 * Execute market events (crashes, booms, etc.)
 	 */
-	fun executeMarketEvent(eventType: MarketEventTypeEvent, intensity: Double = 1.0) {
+	fun executeMarketEvent(eventType: MarketEventTypeManager, intensity: Double = 1.0) {
 		when (eventType) {
-			MarketEventTypeEvent.BULL_MARKET -> {
+			MarketEventTypeManager.BULL_MARKET -> {
 				stockManager.getAllStocks().forEach { stock ->
 					val increase = stock.currentPrice * BigDecimal.valueOf(0.05 * intensity)
 					val newPrice = stock.currentPrice + increase
 					stockManager.updateStockPrice(stock.symbol, newPrice, "Bull Market")
 				}
 			}
-			MarketEventTypeEvent.BEAR_MARKET -> {
+			MarketEventTypeManager.BEAR_MARKET -> {
 				stockManager.getAllStocks().forEach { stock ->
 					val decrease = stock.currentPrice * BigDecimal.valueOf(0.05 * intensity)
 					val newPrice = (stock.currentPrice - decrease).max(BigDecimal.valueOf(0.01))
 					stockManager.updateStockPrice(stock.symbol, newPrice, "Bear Market")
 				}
 			}
-			MarketEventTypeEvent.SECTOR_BOOM -> {
+			MarketEventTypeManager.SECTOR_BOOM -> {
 				// Randomly select a sector and boost it
 				val categories = stockManager.getAllStocks()
 					.map { it.category }.distinct().shuffled().take(1)
@@ -342,10 +363,6 @@ class MarketManager @Inject constructor(private val plugin: StockMarketPlugin) {
 					}
 				}
 			}
-
-			MarketEventTypeEvent.MARKET_CRASH -> TODO()
-			MarketEventTypeEvent.ECONOMIC_STIMULUS -> TODO()
-			MarketEventTypeEvent.INTEREST_RATE_CHANGE -> TODO()
 		}
 	}
 }

@@ -7,8 +7,10 @@ import net.crewco.stockmarket.events.StockPriceChangeEvent
 import net.crewco.stockmarket.events.StockTransactionEvent
 import net.crewco.stockmarket.StockMarketPlugin
 import net.crewco.stockmarket.StockMarketPlugin.Companion.marketManager
-import net.crewco.stockmarket.StockMarketPlugin.Companion.portfolioManager
 import net.crewco.stockmarket.StockMarketPlugin.Companion.stockManager
+import net.crewco.stockmarket.StockMarketPlugin.Companion.portfolioManager
+import net.crewco.stockmarket.StockMarketPlugin.Companion.bankingAPI
+
 import org.bukkit.OfflinePlayer
 import java.math.BigDecimal
 import java.util.*
@@ -72,24 +74,24 @@ class StockMarketAPI(private val plugin: StockMarketPlugin) {
 	}
 
 	/**
-	 * Get player's balance
+	 * Get player's balance (from Banking Plugin)
 	 */
 	fun getPlayerBalance(player: OfflinePlayer): BigDecimal {
-		return portfolioManager.getBalance(player.uniqueId)
+		return bankingAPI?.getBalance(player) ?: BigDecimal.ZERO
 	}
 
 	/**
-	 * Add money to player's balance
+	 * Add money to player's balance (through Banking Plugin)
 	 */
 	fun addPlayerBalance(player: OfflinePlayer, amount: BigDecimal): Boolean {
-		return portfolioManager.addBalance(player.uniqueId, amount)
+		return bankingAPI?.deposit(player, amount, "Stock Market Credit") ?: false
 	}
 
 	/**
-	 * Remove money from player's balance
+	 * Remove money from player's balance (through Banking Plugin)
 	 */
 	fun removePlayerBalance(player: OfflinePlayer, amount: BigDecimal): Boolean {
-		return portfolioManager.removeBalance(player.uniqueId, amount)
+		return bankingAPI?.withdraw(player, amount, "Stock Market Transaction") ?: false
 	}
 
 	/**

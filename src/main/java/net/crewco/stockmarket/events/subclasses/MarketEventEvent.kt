@@ -1,6 +1,7 @@
 package net.crewco.stockmarket.events.subclasses
 
 import net.crewco.stockmarket.data.Stock
+import net.crewco.stockmarket.managers.subclasses.MarketEventTypeManager
 import org.bukkit.event.Event
 import org.bukkit.event.HandlerList
 
@@ -8,7 +9,7 @@ import org.bukkit.event.HandlerList
  * Event fired during major market events
  */
 class MarketEventEvent(
-	val eventType: MarketEventTypeEvent,
+	val eventType: MarketEventTypeManager,
 	val intensity: Double,
 	val affectedStocks: List<Stock>,
 	val description: String

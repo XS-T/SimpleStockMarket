@@ -82,6 +82,9 @@ dependencies {
 	implementation("mysql:mysql-connector-java:8.0.28")
 	implementation("com.zaxxer:HikariCP:7.0.2")
 
+	// Banking API
+	compileOnly("com.github.XS-T:SimpleBanking:0.0.0")
+
 /*
 	// Kotlin
 	implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.7.22")
@@ -167,4 +170,5 @@ bukkit {
 	authors = listOf("CrewCo Team", *project_owners.split(",").toTypedArray())
 	main = "$project_package.$project_plugin_class"
 	apiVersion = "1.21"
+	depend = listOf("Banking")
 }

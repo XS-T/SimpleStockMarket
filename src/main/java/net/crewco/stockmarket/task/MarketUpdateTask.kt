@@ -55,27 +55,23 @@ class MarketUpdateTask @Inject constructor(private val plugin: StockMarketPlugin
 	}
 
 	private fun triggerRandomMarketEvent() {
-		val eventTypes = MarketEventTypeEvent.entries.toTypedArray()
+		val eventTypes = MarketEventTypeManager.entries.toTypedArray()
 		val randomEvent = eventTypes.random()
 		val intensity = Random.nextDouble(0.5, 2.0)
 
 		when (randomEvent) {
-			MarketEventTypeEvent.BULL_MARKET -> {
+			MarketEventTypeManager.BULL_MARKET -> {
 				marketManager.executeMarketEvent(randomEvent, intensity)
 				broadcastMarketNews("§a📈 BULL MARKET: All stocks are surging upward!")
 			}
-			MarketEventTypeEvent.BEAR_MARKET -> {
+			MarketEventTypeManager.BEAR_MARKET -> {
 				marketManager.executeMarketEvent(randomEvent, intensity)
 				broadcastMarketNews("§c📉 BEAR MARKET: Market experiencing widespread decline!")
 			}
-			MarketEventTypeEvent.SECTOR_BOOM -> {
+			MarketEventTypeManager.SECTOR_BOOM -> {
 				marketManager.executeMarketEvent(randomEvent, intensity)
 				broadcastMarketNews("§6🚀 SECTOR BOOM: Specific sector experiencing rapid growth!")
 			}
-
-			MarketEventTypeEvent.MARKET_CRASH -> TODO()
-			MarketEventTypeEvent.ECONOMIC_STIMULUS -> TODO()
-			MarketEventTypeEvent.INTEREST_RATE_CHANGE -> TODO()
 		}
 
 		// Fire custom event for other plugins
@@ -102,14 +98,17 @@ class MarketUpdateTask @Inject constructor(private val plugin: StockMarketPlugin
 		plugin.logger.info("Market Event: $message")
 	}
 
-	private fun getEventDescription(eventType: MarketEventTypeEvent): String {
+	private fun getEventDescription(eventType: Any): String {
 		return when (eventType) {
-			MarketEventTypeEvent.BULL_MARKET -> "Strong economic indicators drive widespread optimism"
-			MarketEventTypeEvent.BEAR_MARKET -> "Economic uncertainty causes market-wide pessimism"
-			MarketEventTypeEvent.SECTOR_BOOM -> "Technological breakthrough boosts sector performance"
+			MarketEventTypeManager.BULL_MARKET -> "Strong economic indicators drive widespread optimism"
+			MarketEventTypeManager.BEAR_MARKET -> "Economic uncertainty causes market-wide pessimism"
+			MarketEventTypeManager.SECTOR_BOOM -> "Technological breakthrough boosts sector performance"
 			MarketEventTypeEvent.MARKET_CRASH -> "Unexpected event triggers rapid market decline"
 			MarketEventTypeEvent.ECONOMIC_STIMULUS -> "Government stimulus package boosts market confidence"
 			MarketEventTypeEvent.INTEREST_RATE_CHANGE -> "Central bank adjusts interest rates affecting all sectors"
+			else -> {
+				return "Not a Valid Event"
+			}
 		}
 	}
 }

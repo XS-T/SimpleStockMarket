@@ -83,7 +83,7 @@ dependencies {
 	implementation("com.zaxxer:HikariCP:7.0.2")
 
 	// Banking API
-	compileOnly("com.github.XS-T:SimpleBanking:0.0.0")
+	compileOnly("com.github.XS-T:SimpleBanking:0.0.1")
 
 /*
 	// Kotlin
